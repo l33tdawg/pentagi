@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	obs "pentagi/pkg/observability"
 	"pentagi/pkg/observability/langfuse"
 	"pentagi/pkg/providers/pconfig"
+	"pentagi/pkg/sage"
 	"pentagi/pkg/templates"
 	"pentagi/pkg/tools"
 
@@ -126,10 +128,43 @@ func (fp *flowProvider) performAgentChain(
 				),
 			}
 		} else {
+			// SAGE wrapper hook: ambient memory recall before each model call.
+			// Gated on SAGE_WRAPPER_ENABLED — default off, so this is a no-op
+			// in normal builds. W1 fills in the body of BeforeStep.
+			var sageRecall sage.RecallMeta
+			if fp.sageWrapperEnabled() {
+				var sageErr error
+				chain, sageRecall, sageErr = sage.BeforeStep(
+					ctx,
+					fp.sageClient(),
+					fp.sageStepContext(optAgentType, taskID, subtaskID),
+					chain,
+				)
+				if sageErr != nil {
+					logger.WithError(sageErr).Warn("sage BeforeStep failed; continuing without ambient memory")
+				}
+			}
+			_ = sageRecall // referenced again by AfterStep below
+
 			result, err = fp.callWithRetries(ctx, optAgentType, chainID, taskID, subtaskID, chain, executor, executionContext)
 			if err != nil {
 				logger.WithError(err).Error("failed to call agent chain")
 				return err
+			}
+
+			// SAGE wrapper hook: ambient memory storage after each model step.
+			// Best-effort — errors logged, never returned. W1 fills in the body
+			// (it should fire-and-forget into a goroutine internally).
+			if fp.sageWrapperEnabled() {
+				if sageErr := sage.AfterStep(
+					ctx,
+					fp.sageClient(),
+					fp.sageStepContext(optAgentType, taskID, subtaskID),
+					chain,
+					sageRecall,
+				); sageErr != nil {
+					logger.WithError(sageErr).Warn("sage AfterStep failed; observation not stored")
+				}
 			}
 
 			if err := fp.updateMsgChainUsage(ctx, chainID, optAgentType, result.info, rollLastUpdateTime()); err != nil {
@@ -1126,4 +1161,49 @@ func (fp *flowProvider) storeToolExecutionToGraphiti(
 	storeEvaluator.End(
 		langfuse.WithEvaluatorStatus("success"),
 	)
+}
+
+// --- SAGE wrapper helpers (T0 scaffolding) -----------------------------------
+//
+// These three helpers exist only so the call sites in performAgentChain
+// compile cleanly. W1 will replace their bodies (and likely promote the
+// SAGE client into flowProvider as a real field) when filling in the
+// BeforeStep / AfterStep logic. While SAGE_WRAPPER_ENABLED is unset (the
+// default), sageWrapperEnabled() returns false and the hooks are dead code,
+// so behavior is identical to upstream.
+
+// sageWrapperEnabled reports whether ambient SAGE memory hooks should run.
+// Reads SAGE_WRAPPER_ENABLED from the environment; defaults to false.
+func (fp *flowProvider) sageWrapperEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SAGE_WRAPPER_ENABLED"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// sageClient returns the SAGE REST client this flow should use. Stub for T0:
+// returns nil. W1 will wire actual client construction (likely lazily via a
+// flowProvider field populated from config/env at flow-bootstrap time).
+func (fp *flowProvider) sageClient() *sage.Client {
+	return nil
+}
+
+// sageStepContext builds the per-step metadata BeforeStep / AfterStep need
+// to construct meaningful recall queries and storage domains. Stub for T0:
+// returns a zero-value StepContext apart from FlowID, which is already known.
+// W1 will populate AgentRole / TaskID / Target from optAgentType + the
+// flowProvider's task lookup helpers.
+func (fp *flowProvider) sageStepContext(
+	optAgentType pconfig.ProviderOptionsType,
+	taskID, subtaskID *int64,
+) sage.StepContext {
+	sc := sage.StepContext{
+		FlowID: fp.flowID,
+	}
+	if taskID != nil {
+		sc.TaskID = *taskID
+	}
+	return sc
 }
