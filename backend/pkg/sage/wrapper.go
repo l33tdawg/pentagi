@@ -344,36 +344,16 @@ func recallDomain(sc StepContext) string {
 	return fmt.Sprintf("pentest:%s", role)
 }
 
-// storeDomain is a more specific tag for AfterStep — includes the target so
-// future flows targeting the same host can recall this observation.
+// storeDomain is intentionally identical to recallDomain so that BeforeStep
+// can recall what AfterStep just stored. The previous shape included the
+// target as a domain segment ("pentest:<target>:<role>"), which is more
+// specific but makes recall blind to its own writes — BeforeStep queries
+// the role-only shape and never finds them. Target info isn't lost: it's
+// carried in the memory content (tool name + args + result include the
+// host/url naturally), and SAGE's semantic recall ranks by relevance
+// regardless of domain segmentation.
 func storeDomain(sc StepContext) string {
-	role := sc.AgentRole
-	if role == "" {
-		role = "agent"
-	}
-	target := sanitizeDomainSegment(sc.Target)
-	if target == "" {
-		return fmt.Sprintf("pentest:%s", role)
-	}
-	return fmt.Sprintf("pentest:%s:%s", target, role)
-}
-
-// sanitizeDomainSegment trims whitespace and clips obviously oversized targets
-// so a multi-paragraph user prompt doesn't end up as a domain tag.
-func sanitizeDomainSegment(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	// First line, capped at 80 chars — the same convention as graphiti
-	// source descriptions in performer.go.
-	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
-		s = s[:i]
-	}
-	if len(s) > 80 {
-		s = s[:80]
-	}
-	return s
+	return recallDomain(sc)
 }
 
 // recallBudgetChars returns the char-count proxy for the recall budget.

@@ -331,8 +331,11 @@ func TestAfterStep_HighSignalStored(t *testing.T) {
 	if r.MemoryType != "observation" {
 		t.Fatalf("expected memory_type=observation, got %q", r.MemoryType)
 	}
-	if r.Domain != "pentest:target.local:pentester" {
-		t.Fatalf("expected domain pentest:target.local:pentester, got %q", r.Domain)
+	// storeDomain == recallDomain by design (so BeforeStep can recall what
+	// AfterStep just stored). Target metadata travels in the content, not
+	// the domain segment.
+	if r.Domain != "pentest:pentester" {
+		t.Fatalf("expected domain pentest:pentester, got %q", r.Domain)
 	}
 	if r.Confidence != 0.7 {
 		t.Fatalf("expected confidence 0.7, got %v", r.Confidence)
@@ -420,17 +423,20 @@ func TestAfterStep_NoToolMessageInChain(t *testing.T) {
 
 // --- Internal helper checks --------------------------------------------------
 
-func TestSanitizeDomainSegment(t *testing.T) {
-	cases := map[string]string{
-		"":                      "",
-		"   ":                   "",
-		"target.local":          "target.local",
-		"target.local\nextra":   "target.local",
-		strings.Repeat("a", 90): strings.Repeat("a", 80),
+func TestStoreDomain_MatchesRecallDomain(t *testing.T) {
+	// Regression: storeDomain previously included a target segment that
+	// recallDomain didn't, so AfterStep wrote to "pentest:<target>:<role>"
+	// while BeforeStep queried "pentest:<role>" and never found those
+	// writes. They must agree exactly.
+	cases := []StepContext{
+		{AgentRole: "pentester", Target: "172.28.0.10"},
+		{AgentRole: "pentester", Target: ""},
+		{AgentRole: "", Target: "host.local"},
+		{AgentRole: "memorist", Target: "https://example.com/path?q=1"},
 	}
-	for in, want := range cases {
-		if got := sanitizeDomainSegment(in); got != want {
-			t.Errorf("sanitizeDomainSegment(%q) = %q, want %q", in, got, want)
+	for _, sc := range cases {
+		if got, want := storeDomain(sc), recallDomain(sc); got != want {
+			t.Errorf("storeDomain(%+v) = %q, recallDomain = %q — must match", sc, got, want)
 		}
 	}
 }
