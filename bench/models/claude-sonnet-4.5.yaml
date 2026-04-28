@@ -1,0 +1,53 @@
+name: claude-sonnet-4.5
+description: |
+  Anthropic Claude Sonnet 4.5 (model id: claude-sonnet-4-5). Ceiling baseline
+  for the SAGE benchmark — the model is already strong, so SAGE should at
+  worst not hurt it (no regression) and ideally still help on cross-session
+  recall tasks. Hits Anthropic's API directly via pentagi's built-in
+  anthropic provider — no local serve / no GPU.
+
+provider: anthropic
+base_url: https://api.anthropic.com/v1
+# Resolved at runtime by the harness from the named env var.
+api_key: ${ANTHROPIC_API_KEY}
+
+# No serve / teardown — Anthropic is a hosted API.
+serve_command: ""
+teardown_command: ""
+
+# Env vars consumed by pentagi's anthropic provider
+# (backend/pkg/providers/anthropic). The provider activates when
+# ANTHROPIC_API_KEY is non-empty (see backend/pkg/providers/providers.go
+# line ~241). Model selection happens via the per-agent yaml model fields
+# inside the provider's config, which the harness can override; for the
+# benchmark we want to pin every agent role to the same Sonnet model id.
+pentagi_env:
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  ANTHROPIC_SERVER_URL: https://api.anthropic.com/v1
+
+# Model id for harness use when wiring a per-agent override or a custom
+# provider config. Use this exact string when constructing pconfig YAML.
+model_id: claude-sonnet-4-5
+
+smoke_prompt: "Say hello in exactly 3 words."
+smoke_expect_substring: ""
+
+gpu_required: false
+gpu_vram_min_gb: 0
+disk_min_gb: 0
+hf_auth_required: false
+context_window: 200000
+requires_secrets:
+  - ANTHROPIC_API_KEY
+notes: |
+  This profile carries no serve_command — the harness's serve.sh treats an
+  empty serve_command as "nothing to bring up, the endpoint is already live".
+  Set ANTHROPIC_API_KEY in your shell or in bench/.env before invoking the
+  benchmark runner.
+
+  pentagi's anthropic provider ships default per-agent model selections in
+  backend/pkg/providers/anthropic/config.yml. The benchmark harness is
+  expected to either (a) write a custom provider yaml that pins every agent
+  role to claude-sonnet-4-5, or (b) accept whatever upstream defaults exist
+  for fairness across runs. Either way, no pentagi schema changes are
+  required by this profile.
