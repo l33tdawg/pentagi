@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1163,14 +1165,19 @@ func (fp *flowProvider) storeToolExecutionToGraphiti(
 	)
 }
 
-// --- SAGE wrapper helpers (T0 scaffolding) -----------------------------------
+// --- SAGE wrapper helpers (W1) ----------------------------------------------
 //
-// These three helpers exist only so the call sites in performAgentChain
-// compile cleanly. W1 will replace their bodies (and likely promote the
-// SAGE client into flowProvider as a real field) when filling in the
-// BeforeStep / AfterStep logic. While SAGE_WRAPPER_ENABLED is unset (the
-// default), sageWrapperEnabled() returns false and the hooks are dead code,
-// so behavior is identical to upstream.
+// All SAGE config is env-driven (matches the SAGE_WRAPPER_ENABLED gate that
+// T0 already wired). The client is constructed lazily on first use so flows
+// that never enable SAGE pay zero cost, and a failure to construct the
+// client (e.g. key file missing, SAGE node unreachable) disables the
+// wrapper for the rest of the flow rather than crashing the agent.
+
+const (
+	sageDefaultBaseURL    = "http://localhost:8080"
+	sageDefaultAgentName  = "pentagi-wrapper"
+	sageDefaultTimeoutSec = 30
+)
 
 // sageWrapperEnabled reports whether ambient SAGE memory hooks should run.
 // Reads SAGE_WRAPPER_ENABLED from the environment; defaults to false.
@@ -1183,27 +1190,107 @@ func (fp *flowProvider) sageWrapperEnabled() bool {
 	}
 }
 
-// sageClient returns the SAGE REST client this flow should use. Stub for T0:
-// returns nil. W1 will wire actual client construction (likely lazily via a
-// flowProvider field populated from config/env at flow-bootstrap time).
+// sageClient returns the SAGE REST client this flow should use. Constructed
+// lazily on first call from env vars. If construction fails, the wrapper is
+// disabled for the remainder of this flow (logged once at INFO).
 func (fp *flowProvider) sageClient() *sage.Client {
-	return nil
+	fp.sageOnce.Do(func() {
+		if !fp.sageWrapperEnabled() {
+			fp.sageDisabled = true
+			return
+		}
+
+		baseURL := envOrDefault("SAGE_BASE_URL", sageDefaultBaseURL)
+		keyPath := expandHome(envOrDefault("SAGE_KEY_PATH", filepath.Join("~", ".sage", "agent.key")))
+		agentName := envOrDefault("SAGE_AGENT_NAME", sageDefaultAgentName)
+		timeoutSec := sageDefaultTimeoutSec
+		if v := strings.TrimSpace(os.Getenv("SAGE_TIMEOUT_SECONDS")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				timeoutSec = n
+			}
+		}
+
+		client, err := sage.NewClient(
+			baseURL,
+			keyPath,
+			agentName,
+			time.Duration(timeoutSec)*time.Second,
+			true, // enabled — sageWrapperEnabled() already gated this
+		)
+		if err != nil {
+			logrus.WithError(err).
+				WithField("base_url", baseURL).
+				WithField("key_path", keyPath).
+				Info("SAGE wrapper: client construction failed; disabling ambient memory for this flow")
+			fp.sageDisabled = true
+			return
+		}
+
+		fp.sageInstance = client
+	})
+
+	if fp.sageDisabled {
+		return nil
+	}
+	return fp.sageInstance
 }
 
 // sageStepContext builds the per-step metadata BeforeStep / AfterStep need
-// to construct meaningful recall queries and storage domains. Stub for T0:
-// returns a zero-value StepContext apart from FlowID, which is already known.
-// W1 will populate AgentRole / TaskID / Target from optAgentType + the
-// flowProvider's task lookup helpers.
+// to construct meaningful recall queries and storage domains.
+//
+// AgentRole comes from the langchaingo agent type (pconfig.OptionsType*).
+// Target is taken from the task's Input field — that's where the operator
+// states the host/url under test in PentAGI. SubtaskDescription is pulled
+// when subtaskID is set so BeforeStep can fold it into the recall query.
 func (fp *flowProvider) sageStepContext(
 	optAgentType pconfig.ProviderOptionsType,
 	taskID, subtaskID *int64,
 ) sage.StepContext {
 	sc := sage.StepContext{
-		FlowID: fp.flowID,
+		FlowID:    fp.flowID,
+		AgentRole: string(optAgentType),
 	}
 	if taskID != nil {
 		sc.TaskID = *taskID
 	}
+
+	// Best-effort lookups — silently skipped on error. We don't want SAGE
+	// metadata gathering to block the agent loop.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if taskID != nil && fp.db != nil {
+		if t, err := fp.db.GetTask(ctx, *taskID); err == nil {
+			sc.Target = strings.TrimSpace(t.Input)
+		}
+	}
+	if subtaskID != nil && fp.db != nil {
+		if st, err := fp.db.GetSubtask(ctx, *subtaskID); err == nil {
+			sc.SubtaskDescription = strings.TrimSpace(st.Description)
+		}
+	}
+
 	return sc
+}
+
+// envOrDefault returns os.Getenv(key) trimmed, or def if empty.
+func envOrDefault(key, def string) string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+// expandHome replaces a leading "~" with the user's home directory. Best
+// effort — on lookup failure the original path is returned unchanged.
+func expandHome(p string) string {
+	if !strings.HasPrefix(p, "~") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	return filepath.Join(home, p[1:])
 }
