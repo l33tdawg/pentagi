@@ -219,7 +219,12 @@ def discover_models(selectors: Optional[List[str]] = None) -> List[Model]:
     if not MODELS_ROOT.exists():
         return []
 
-    yaml_paths = sorted(MODELS_ROOT.glob("*.yaml")) + sorted(MODELS_ROOT.glob("*.yml"))
+    # Exclude *.compose.yaml — those are docker-compose stacks for vLLM models,
+    # not model profiles. They sit next to profile YAMLs by W4 convention.
+    yaml_paths = [
+        p for p in sorted(MODELS_ROOT.glob("*.yaml")) + sorted(MODELS_ROOT.glob("*.yml"))
+        if not p.name.endswith(".compose.yaml") and not p.name.endswith(".compose.yml")
+    ]
     models = [load_model(p) for p in yaml_paths]
 
     if not selectors:
