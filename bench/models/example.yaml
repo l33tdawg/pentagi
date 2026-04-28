@@ -1,0 +1,10 @@
+# Example model profile — exists for the runner's --dry-run smoke test.
+# Real model profiles are written by W4 against bench/contracts.md.
+name: example
+provider: openai
+base_url: https://api.openai.com/v1
+flow_provider_name: openai
+env:
+  OPEN_AI_KEY: ${OPENAI_API_KEY}
+  SIMPLE_MODEL: gpt-4o-mini
+  AGENT_MODEL: gpt-4o-mini
