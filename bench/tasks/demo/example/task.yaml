@@ -1,0 +1,15 @@
+# Smallest possible task — exists for the runner's --dry-run smoke test.
+# Real demo tasks live under bench/tasks/demo/<descriptive-name>/ and
+# typically reference an upstream pentagi prompt rather than carrying a
+# stack of their own.
+name: example
+description: |
+  Example single-step task for smoke-testing the bench harness. Has no
+  docker stack, no real success criterion. Treat any non-dry-run row from
+  this task with suspicion.
+target_host: http://example.invalid
+upstream_prompt: examples/prompts/base_web_pentest.md
+success_criterion:
+  type: self_report
+timeout_seconds: 60
+tags: [smoke, demo]
