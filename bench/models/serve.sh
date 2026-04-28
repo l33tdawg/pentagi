@@ -7,7 +7,7 @@
 #   ./bench/models/serve.sh list             # list available profiles
 #
 # The profile name is the basename of bench/models/<profile>.yaml without
-# extension (e.g. "qwen3.5-7b-instruct").
+# extension (e.g. "llama3-8b").
 #
 # Idempotent: a missing/empty serve_command (e.g. for hosted API profiles
 # like claude-sonnet-4.5) is treated as a no-op.
@@ -23,8 +23,8 @@ Usage: $0 <up|down|list> [profile]
 
 Examples:
   $0 list
-  $0 up   qwen3.5-7b-instruct
-  $0 down qwen3.5-7b-instruct
+  $0 up   llama3-8b
+  $0 down llama3-8b
   $0 up   claude-sonnet-4.5     # no-op; hosted API
 EOF
 }

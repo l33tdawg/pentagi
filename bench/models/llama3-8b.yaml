@@ -1,0 +1,42 @@
+name: llama3-8b
+description: |
+  Meta Llama-3 8B Instruct served by ollama (already installed on most dev
+  machines). Primary "weaker model" baseline for the SAGE benchmark — this
+  is where ambient cross-session memory should win hardest. Apple-Silicon
+  friendly: ollama uses Metal, no CUDA required.
+
+provider: custom
+base_url: http://localhost:11434/v1
+api_key: ollama
+
+serve_command: |
+  # Idempotent. ollama serve typically runs as a launchd service / system
+  # daemon already; this just confirms reachability and warms the model.
+  curl -sf http://localhost:11434/api/tags > /dev/null || \
+    (echo "ollama not running on :11434 — start it via 'ollama serve' or systemctl" && exit 1)
+  ollama list | grep -q '^llama3' || ollama pull llama3
+teardown_command: ""
+
+pentagi_env:
+  LLM_SERVER_URL: http://localhost:11434/v1
+  LLM_SERVER_KEY: ollama
+  LLM_SERVER_MODEL: llama3:latest
+  LLM_SERVER_PROVIDER: meta
+  LLM_SERVER_LEGACY_REASONING: "false"
+  LLM_SERVER_PRESERVE_REASONING: "false"
+
+model_id: llama3:latest
+
+smoke_prompt: "Say hello in exactly 3 words."
+smoke_expect_substring: ""
+
+gpu_required: false
+gpu_vram_min_gb: 0
+disk_min_gb: 5
+hf_auth_required: false
+context_window: 8192
+requires_secrets: []
+notes: |
+  Apple Silicon 16GB+ unified memory recommended. On M1/M2/M3 Max-class
+  machines (32+ GB) this runs comfortably alongside pentagi backend +
+  SAGE node + a docker compose CTF stack with headroom.

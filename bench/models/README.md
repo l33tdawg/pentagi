@@ -8,90 +8,89 @@ launch a target LLM and tell pentagi how to reach it. One YAML per model.
 > is codified at `bench/contracts.md` (W2). If anything here disagrees with
 > `contracts.md`, `contracts.md` wins — open a PR to align.
 
+## Inference backend: ollama (local) + Anthropic API (ceiling)
+
+The local profiles target **ollama** (already-installed on most dev
+machines, Apple-Silicon friendly via Metal, no CUDA required). The hosted
+ceiling profile targets the Anthropic API directly. Earlier drafts of this
+directory used vLLM compose stacks — that variant is preserved in git
+history but isn't part of the shipped benchmark because it requires NVIDIA
+GPUs and our reference benchmark machine is an M1 Max.
+
 ## How a profile is consumed
 
 A profile has three jobs:
 
-1. **Bring the model up.** `serve_command` is a shell snippet (usually a
-   `docker compose` invocation) that the harness executes. For hosted APIs
-   like Anthropic this is empty — there's nothing to launch.
+1. **Bring the model up.** `serve_command` is a shell snippet — for ollama
+   profiles it just confirms the daemon is reachable and pulls the model
+   tag if missing. For Anthropic this is a no-op.
 2. **Tell pentagi where the model is.** `pentagi_env` is a map of env vars
-   that get exported into pentagi's environment before the harness starts
-   it. We do **not** add new pentagi config knobs — we only set env vars
-   that pentagi already supports (see `backend/pkg/config/config.go` and
-   `.env.example`).
+   the harness exports into pentagi's environment before launch. We do
+   **not** add new pentagi config knobs — only env vars pentagi already
+   supports (see `backend/pkg/config/config.go` and `.env.example`).
 3. **Tell the harness how to know the model is up.** `smoke_prompt` is a
-   trivial completion the harness fires once before kicking off real tasks.
+   trivial completion the harness fires once before real tasks.
 
 The `serve.sh` wrapper handles up/down so the harness doesn't have to know
 the YAML layout:
 
 ```bash
 ./bench/models/serve.sh list
-./bench/models/serve.sh up   qwen3.5-7b-instruct
-./bench/models/serve.sh down qwen3.5-7b-instruct
+./bench/models/serve.sh up   llama3-8b
+./bench/models/serve.sh down llama3-8b
 ```
 
 ## Available profiles
 
-| Profile | Provider | GPU | Min VRAM | HF auth | Notes |
+| Profile | Backend | GPU | Min unified RAM | Disk | Notes |
 |---|---|---|---|---|---|
-| `qwen3.5-7b-instruct` | vLLM (custom) | yes | 20 GB (1x) | no | primary weak baseline |
-| `llama-3.1-8b-instruct` | vLLM (custom) | yes | 24 GB (1x) | **yes** | second weak baseline, gated repo |
-| `qwen3.5-32b-instruct` | vLLM (custom) | yes | 80 GB (2x preferred) | no | mid-tier sanity check |
-| `claude-sonnet-4.5` | Anthropic | no | N/A | no | hosted-API ceiling |
+| `llama3-8b` | ollama | Metal/CUDA via ollama | 16 GB | 5 GB | primary weak baseline |
+| `deepseek-r1-8b` | ollama | Metal/CUDA via ollama | 16 GB | 6 GB | reasoning-trace baseline |
+| `gemma3-12b` | ollama | Metal/CUDA via ollama | 24 GB | 9 GB | mid-tier capacity sanity check |
+| `claude-sonnet-4.5` | Anthropic API | none | none | none | hosted-API ceiling |
 
-Disk: each vLLM profile pulls 15–80 GB of weights into the HF cache on
-first run. The cache is mounted to `${HF_HOME:-./.hf-cache}` on the host so
-subsequent runs don't re-download.
+`ollama pull` runs once per tag if the weights aren't cached. After that,
+ollama keeps them on disk under `~/.ollama/models`.
 
 ## Pentagi env-var keys these profiles set
 
-The vLLM profiles target pentagi's **custom** provider (the OpenAI-compatible
-`LLM_SERVER_*` knobs in `backend/pkg/providers/custom/`). The Anthropic
-profile targets pentagi's built-in **anthropic** provider.
+The ollama profiles target pentagi's **custom** provider (the OpenAI-
+compatible `LLM_SERVER_*` knobs in `backend/pkg/providers/custom/`). The
+Anthropic profile targets pentagi's built-in **anthropic** provider.
 
 | Key | Used by | Purpose |
 |---|---|---|
-| `LLM_SERVER_URL` | custom provider | OpenAI-compatible base URL (e.g. `http://localhost:8000/v1`) |
-| `LLM_SERVER_KEY` | custom provider | bearer token (vLLM ignores; we send `dummy`) |
-| `LLM_SERVER_MODEL` | custom provider | model id, e.g. `Qwen/Qwen3.5-7B-Instruct` |
-| `LLM_SERVER_PROVIDER` | custom provider | model-name prefix filter (`qwen`, `meta`, ...) |
+| `LLM_SERVER_URL` | custom provider | OpenAI-compatible base URL — `http://localhost:11434/v1` for ollama |
+| `LLM_SERVER_KEY` | custom provider | bearer token (ollama ignores; we send `ollama`) |
+| `LLM_SERVER_MODEL` | custom provider | model id, e.g. `llama3:latest`, `gemma3:12b` |
+| `LLM_SERVER_PROVIDER` | custom provider | model-name prefix filter (`meta`, `google`, `deepseek`, …) |
+| `LLM_SERVER_LEGACY_REASONING` | custom provider | `true` for reasoning models like deepseek-r1 |
+| `LLM_SERVER_PRESERVE_REASONING` | custom provider | preserve `<think>` blocks in chain |
 | `ANTHROPIC_API_KEY` | anthropic provider | required to enable Anthropic in pentagi |
 | `ANTHROPIC_SERVER_URL` | anthropic provider | API base URL |
 
 Setting `LLM_SERVER_URL` together with `LLM_SERVER_MODEL` is what
 **activates** the custom provider in pentagi (see
 `backend/pkg/providers/providers.go`). Setting `ANTHROPIC_API_KEY` is what
-activates the anthropic provider. No further pentagi config changes are
+activates the anthropic provider. No further pentagi config changes
 needed.
 
 ## Bringing a model up
 
-### Local vLLM (Qwen 7B / Llama 8B / Qwen 32B)
+### Local ollama (llama3-8b / deepseek-r1-8b / gemma3-12b)
 
 Prereqs:
-- Docker with the NVIDIA Container Toolkit installed.
-- Enough GPU(s) per the table above.
-- For Llama-3.1: a HuggingFace token with access to the gated repo,
-  exported as `HF_TOKEN`.
+- ollama installed and running (`brew install ollama` then `ollama serve`,
+  or use the macOS app — it auto-starts as a launchd service).
+- Disk: 5–9 GB per model tag.
 
 ```bash
-# Optional: pin a HF cache dir (default: ./.hf-cache next to compose file).
-export HF_HOME=/srv/hf-cache
-
-# Llama only: provide HF token for gated repo.
-export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
-
-./bench/models/serve.sh up qwen3.5-7b-instruct
-# wait — the first run downloads weights; healthcheck sleeps until /v1/models is 200.
+./bench/models/serve.sh up llama3-8b
+# Pulls the tag if missing; verifies /api/tags is reachable; warms the model.
 
 # When done:
-./bench/models/serve.sh down qwen3.5-7b-instruct
+./bench/models/serve.sh down llama3-8b   # no-op for ollama (daemon stays up)
 ```
-
-The compose files include a healthcheck against `/v1/models`, so
-`docker compose ... up -d --wait` blocks until vLLM is actually serving.
 
 ### Anthropic (Sonnet 4.5)
 
@@ -101,53 +100,40 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 The harness reads `pentagi_env.ANTHROPIC_API_KEY` (which is the literal
-string `${ANTHROPIC_API_KEY}`) and substitutes it from the current shell at
+string `${ANTHROPIC_API_KEY}`) and substitutes from the current shell at
 launch time.
 
 ## Adding a new profile
 
 1. Drop a new `bench/models/<name>.yaml` whose top-level fields match the
    schema in `bench/contracts.md`. Keep `name` equal to the file basename.
-2. If your model is locally served, add a sibling
-   `bench/models/<name>.compose.yaml` and reference it from `serve_command`
-   / `teardown_command`. Use the existing files as templates — keep the
-   `vllm/vllm-openai` image, the `${HF_HOME:-./.hf-cache}` mount, and a
-   healthcheck that polls `/v1/models`.
-3. Pick the right pentagi env vars:
-   - **OpenAI-compatible (vLLM, llama.cpp server, ollama-as-OpenAI):** use
-     the `LLM_SERVER_*` keys (custom provider).
+2. Pick the right pentagi env vars:
+   - **OpenAI-compatible (ollama, vLLM, llama.cpp server):** use the
+     `LLM_SERVER_*` keys (custom provider).
    - **OpenAI itself:** use `OPEN_AI_KEY` + `OPEN_AI_SERVER_URL`.
    - **Anthropic:** use `ANTHROPIC_API_KEY` + `ANTHROPIC_SERVER_URL`.
    - Other native providers (Gemini, Bedrock, DeepSeek, GLM, Kimi, Qwen
-     DashScope, Ollama): see `.env.example` in the repo root for the full
-     list. **Do not invent new keys** — pentagi's config struct is fixed.
-4. Run the validation snippets below; if everything parses, you're done.
+     DashScope): see `.env.example` for the full list. **Do not invent
+     new keys** — pentagi's config struct is fixed.
+3. Run the validation snippets below; if everything parses, you're done.
 
 ## Validation
 
-These are the smoke checks W4 ran locally; rerun them whenever you touch a
-profile:
-
 ```bash
-# YAML well-formedness for every profile.
 for f in bench/models/*.yaml; do
     python -c "import yaml,sys; yaml.safe_load(open('$f')); print('ok:', '$f')"
 done
-
-# Compose well-formedness for every vLLM compose file.
-for f in bench/models/*.compose.yaml; do
-    docker compose -f "$f" config >/dev/null && echo "ok: $f"
-done
 ```
 
-The harness will additionally fire `smoke_prompt` against the live endpoint
-once `serve.sh up` returns, before running real tasks.
+The harness fires `smoke_prompt` against the live endpoint once
+`serve.sh up` returns, before running real tasks.
 
 ## Files
 
-- `qwen3.5-7b-instruct.yaml` + `qwen3.5-7b-vllm.compose.yaml`
-- `llama-3.1-8b-instruct.yaml` + `llama-3.1-8b-vllm.compose.yaml`
-- `qwen3.5-32b-instruct.yaml` + `qwen3.5-32b-vllm.compose.yaml`
-- `claude-sonnet-4.5.yaml` (no compose; hosted API)
+- `llama3-8b.yaml`
+- `deepseek-r1-8b.yaml`
+- `gemma3-12b.yaml`
+- `claude-sonnet-4.5.yaml` (no serve; hosted API)
+- `example.yaml` (schema-shaped placeholder used by the dry-run smoke)
 - `serve.sh` — up/down wrapper used by the harness
 - `README.md` — this file

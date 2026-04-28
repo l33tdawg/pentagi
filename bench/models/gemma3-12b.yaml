@@ -1,0 +1,39 @@
+name: gemma3-12b
+description: |
+  Google Gemma-3 12B Instruct served by ollama. Mid-tier capacity entry —
+  larger than the 8B baselines, smaller than a frontier API model. Sanity
+  check that SAGE's value isn't only at the smallest scale; if the
+  cross-session lift survives at 12B, the directional claim generalizes.
+
+provider: custom
+base_url: http://localhost:11434/v1
+api_key: ollama
+
+serve_command: |
+  curl -sf http://localhost:11434/api/tags > /dev/null || \
+    (echo "ollama not running on :11434 — start it via 'ollama serve' or systemctl" && exit 1)
+  ollama list | grep -q '^gemma3:12b' || ollama pull gemma3:12b
+teardown_command: ""
+
+pentagi_env:
+  LLM_SERVER_URL: http://localhost:11434/v1
+  LLM_SERVER_KEY: ollama
+  LLM_SERVER_MODEL: gemma3:12b
+  LLM_SERVER_PROVIDER: google
+  LLM_SERVER_LEGACY_REASONING: "false"
+  LLM_SERVER_PRESERVE_REASONING: "false"
+
+model_id: gemma3:12b
+
+smoke_prompt: "Say hello in exactly 3 words."
+smoke_expect_substring: ""
+
+gpu_required: false
+gpu_vram_min_gb: 0
+disk_min_gb: 9
+hf_auth_required: false
+context_window: 8192
+requires_secrets: []
+notes: |
+  Apple Silicon 24GB+ unified memory recommended for this size. Slower per
+  token than 8B but still well within latency budget for benchmark runs.

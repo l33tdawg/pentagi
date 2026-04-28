@@ -1,0 +1,42 @@
+name: deepseek-r1-8b
+description: |
+  DeepSeek-R1 distilled-Llama-8B served by ollama. Second weaker baseline
+  with native reasoning traces — useful for showing SAGE's wrapper plays
+  nicely with reasoning models, not just plain instruct models. Different
+  family from llama3-8b, so improvements aren't an artifact of one model
+  lineage.
+
+provider: custom
+base_url: http://localhost:11434/v1
+api_key: ollama
+
+serve_command: |
+  curl -sf http://localhost:11434/api/tags > /dev/null || \
+    (echo "ollama not running on :11434 — start it via 'ollama serve' or systemctl" && exit 1)
+  ollama list | grep -q '^deepseek-r1:8b' || ollama pull deepseek-r1:8b
+teardown_command: ""
+
+pentagi_env:
+  LLM_SERVER_URL: http://localhost:11434/v1
+  LLM_SERVER_KEY: ollama
+  LLM_SERVER_MODEL: deepseek-r1:8b
+  LLM_SERVER_PROVIDER: deepseek
+  LLM_SERVER_LEGACY_REASONING: "true"
+  LLM_SERVER_PRESERVE_REASONING: "true"
+
+model_id: deepseek-r1:8b
+
+smoke_prompt: "Say hello in exactly 3 words."
+smoke_expect_substring: ""
+
+gpu_required: false
+gpu_vram_min_gb: 0
+disk_min_gb: 6
+hf_auth_required: false
+context_window: 8192
+requires_secrets: []
+notes: |
+  Reasoning model — `LLM_SERVER_PRESERVE_REASONING=true` keeps `<think>`
+  blocks in the chain so pentagi's chain inspector sees them. The wrapper's
+  AfterStep skips reasoning-only outputs and stores only the post-reason
+  tool calls (high-signal filter is by tool name, not by chain message).
