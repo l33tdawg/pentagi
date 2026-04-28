@@ -1,0 +1,33 @@
+services:
+  outer:
+    build: ./outer
+    container_name: w3-weak-sshd-outer
+    hostname: outer
+    networks:
+      ctfnet:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 22"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  inner:
+    build: ./inner
+    container_name: w3-weak-sshd-inner
+    hostname: inner
+    networks:
+      ctfnet:
+        ipv4_address: 172.28.0.20
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 22"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+networks:
+  ctfnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

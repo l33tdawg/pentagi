@@ -1,0 +1,41 @@
+services:
+  edge:
+    build: ./edge
+    container_name: w3-reuse-topo-edge
+    hostname: edge
+    networks:
+      edgenet:
+        ipv4_address: 172.28.12.10
+      innernet:
+        ipv4_address: 172.28.13.10
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 22"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  deep:
+    build: ./deep
+    container_name: w3-reuse-topo-deep
+    hostname: deep
+    networks:
+      innernet:
+        ipv4_address: 172.28.13.20
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 22"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+networks:
+  edgenet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.12.0/24
+  innernet:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.13.0/24

@@ -1,0 +1,23 @@
+services:
+  box:
+    build: ./box
+    container_name: w3-redis-misconfig
+    hostname: box
+    networks:
+      ctfnet:
+        ipv4_address: 172.28.2.10
+    ports:
+      - "127.0.0.1:16379:6379"
+      - "127.0.0.1:12222:22"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 22 && nc -z 127.0.0.1 6379"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+networks:
+  ctfnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.2.0/24
