@@ -1,6 +1,6 @@
 simple:
-  model: "kimi-k2-turbo-preview"
-  temperature: 0.3
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 8192
   extra_body:
@@ -10,8 +10,8 @@ simple:
     output: 8.0
 
 simple_json:
-  model: "kimi-k2-turbo-preview"
-  temperature: 0.3
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 4096
   json: true
@@ -20,7 +20,7 @@ simple_json:
     output: 8.0
 
 primary_agent:
-  model: "kimi-k2.5"
+  model: "kimi-k2.6"
   temperature: 1.0
   n: 1
   max_tokens: 16384
@@ -31,7 +31,7 @@ primary_agent:
     output: 3.0
 
 assistant:
-  model: "kimi-k2.5"
+  model: "kimi-k2.6"
   temperature: 1.0
   n: 1
   max_tokens: 16384
@@ -42,7 +42,7 @@ assistant:
     output: 3.0
 
 generator:
-  model: "kimi-k2.5"
+  model: "kimi-k2.6"
   temperature: 1.0
   n: 1
   max_tokens: 32768
@@ -53,7 +53,7 @@ generator:
     output: 3.0
 
 refiner:
-  model: "kimi-k2.5"
+  model: "kimi-k2.6"
   temperature: 1.0
   n: 1
   max_tokens: 20480
@@ -64,7 +64,7 @@ refiner:
     output: 3.0
 
 adviser:
-  model: "kimi-k2.5"
+  model: "kimi-k2.6"
   temperature: 1.0
   n: 1
   max_tokens: 8192
@@ -73,8 +73,8 @@ adviser:
     output: 3.0
 
 reflector:
-  model: "kimi-k2-0905-preview"
-  temperature: 0.7
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 4096
   extra_body:
@@ -84,8 +84,8 @@ reflector:
     output: 2.5
 
 searcher:
-  model: "kimi-k2-0905-preview"
-  temperature: 0.7
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 4096
   extra_body:
@@ -95,8 +95,8 @@ searcher:
     output: 2.5
 
 enricher:
-  model: "kimi-k2-0905-preview"
-  temperature: 0.7
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 4096
   extra_body:
@@ -106,7 +106,7 @@ enricher:
     output: 2.5
 
 coder:
-  model: "kimi-k2.5"
+  model: "kimi-k2.6"
   temperature: 1.0
   n: 1
   max_tokens: 20480
@@ -117,8 +117,8 @@ coder:
     output: 3.0
 
 installer:
-  model: "kimi-k2-turbo-preview"
-  temperature: 0.7
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 16384
   extra_body:
@@ -128,8 +128,8 @@ installer:
     output: 8.0
 
 pentester:
-  model: "kimi-k2-turbo-preview"
-  temperature: 0.8
+  model: "kimi-k2.6"
+  temperature: 1.0
   n: 1
   max_tokens: 16384
   extra_body:
