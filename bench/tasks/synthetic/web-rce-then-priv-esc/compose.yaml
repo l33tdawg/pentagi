@@ -1,0 +1,22 @@
+services:
+  app:
+    build: ./app
+    container_name: w3-web-rce-app
+    hostname: app
+    networks:
+      ctfnet:
+        ipv4_address: 172.28.1.10
+    ports:
+      - "127.0.0.1:18080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+networks:
+  ctfnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
