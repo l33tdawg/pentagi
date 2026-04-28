@@ -17,6 +17,7 @@ import (
 	"pentagi/pkg/providers/embeddings"
 	"pentagi/pkg/providers/pconfig"
 	"pentagi/pkg/providers/provider"
+	"pentagi/pkg/sage"
 	"pentagi/pkg/templates"
 	"pentagi/pkg/tools"
 
@@ -156,6 +157,14 @@ type flowProvider struct {
 	maxGACallsLimit int
 	maxLACallsLimit int
 	buildMonitor    executionMonitorBuilder
+
+	// SAGE wrapper (v2 ambient memory). The client is constructed lazily on
+	// the first sageClient() call and cached for the lifetime of the flow.
+	// If construction fails (key missing, node unreachable), sageDisabled is
+	// flipped and subsequent BeforeStep / AfterStep calls become no-ops.
+	sageOnce     sync.Once
+	sageInstance *sage.Client
+	sageDisabled bool
 
 	provider.Provider
 }
